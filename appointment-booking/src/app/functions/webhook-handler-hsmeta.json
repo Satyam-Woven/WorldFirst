@@ -1,0 +1,12 @@
+{
+  "uid": "webhook_handler",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/webhook-handler.js",
+    "secretKeys": [],
+    "endpoint": {
+      "path": "webhook-handler",
+      "methods": ["POST"]
+    }
+  }
+}

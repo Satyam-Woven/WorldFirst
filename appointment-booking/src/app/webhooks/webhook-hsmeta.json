@@ -1,0 +1,41 @@
+{
+  "uid": "appointment_booking_webhooks",
+  "type": "webhooks",
+  "config": {
+    "settings": {
+      "targetUrl": "https://campaign.worldfirst.com/hs/serverless/webhook-handler",
+      "maxConcurrentRequests": 10
+    },
+    "subscriptions": {
+      "crmObjects": [],
+      "legacyCrmObjects": [
+        {
+          "subscriptionType": "ticket.propertyChange",
+          "propertyName": "hubspot_owner_id",
+          "active": true
+        },
+        {
+          "subscriptionType": "ticket.propertyChange",
+          "propertyName": "slot_timing",
+          "active": true
+        },
+        {
+          "subscriptionType": "ticket.propertyChange",
+          "propertyName": "date_of_appointment",
+          "active": true
+        },
+        {
+          "subscriptionType": "contact.propertyChange",
+          "propertyName": "request_reschedule_payload",
+          "active": true
+        },
+        {
+          "subscriptionType": "contact.propertyChange",
+          "propertyName": "request_cancel_ticket_id",
+          "active": true
+        }
+      ],
+      "hubEvents": []
+    }
+  }
+}
