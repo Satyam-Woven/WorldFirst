@@ -21,12 +21,570 @@ const PIPELINE_STAGES = {
   },
 };
 
+const OWNER_POOL = {
+  EEA: ["EEA_OWNER_ID_1", "EEA_OWNER_ID_2", "EEA_OWNER_ID_3"],
+  UK:  ["UK_OWNER_ID_1",  "UK_OWNER_ID_2",  "UK_OWNER_ID_3"],
+};
+
 const TIMEZONE_OFFSET = { EEA: 1, UK: 0 };
 
 const SERVERLESS_URL       = "https://campaign.worldfirst.com/hs/serverless/send_email";
 const FROM_EMAIL           = "no-reply@service.worldfirst.com";
 const TICKET_DATE_PROPERTY = "date_of_appointment";
 const TICKET_TIME_PROPERTY = "slot_timing";
+
+// ── Email HTML Builder ────────────────────────────────────────
+
+function buildCustomerHtml({ ticketId, formattedDate, slotTiming, successFlag, rescheduleUrl, cancelUrl }) {
+  const isRescheduled = successFlag === "Rescheduled";
+  const statusColor   = isRescheduled ? "#1565c0" : "#2e7d32";
+  const statusBg      = isRescheduled ? "#e3f2fd" : "#e8f5e9";
+  const statusBorder  = isRescheduled ? "#bbdefb" : "#c8e6c9";
+  const calIcon       = isRescheduled ? "🔄" : "📅";
+  const calMsg        = isRescheduled
+    ? "Your calendar event has been updated automatically. Open the attached file if it doesn't update."
+    : "The calendar invite is attached. Open it to add the appointment to your calendar automatically.";
+  const rescheduleLabel = isRescheduled ? "Reschedule Again" : "Reschedule Appointment";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#f0f4f8;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4f8;padding:32px 16px;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+
+  <!-- HEADER -->
+  <tr>
+    <td style="background:#0d2137;padding:24px 36px;">
+      <table width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td>
+          <table cellpadding="0" cellspacing="0"><tr>
+            <td style="vertical-align:middle;padding:4px 0;">
+            <img src="https://mdn.marmot-cloud.com/worldfirst/sites/38/2026/04/20260424113953863.svg" width=150 />
+            </td>
+          </tr></table>
+        </td>
+        <td align="right" style="vertical-align:middle;">
+          <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:#4a9eff;background:rgba(74,158,255,0.12);padding:4px 12px;border-radius:20px;border:1px solid rgba(74,158,255,0.25);">Telesales</span>
+        </td>
+      </tr></table>
+    </td>
+  </tr>
+
+  <!-- HERO -->
+  <tr>
+    <td style="padding:32px 36px 24px;border-bottom:1px solid #f0f3f7;">
+      <div style="display:inline-block;padding:5px 12px;border-radius:20px;background:${statusBg};border:1px solid ${statusBorder};margin-bottom:14px;">
+        <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:${statusColor};">● Appointment ${successFlag}</span>
+      </div>
+      <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#0d2137;line-height:1.3;">Your appointment has been ${successFlag.toLowerCase()}.</h1>
+      <p style="margin:0;font-size:14px;color:#64748b;line-height:1.6;">Your telesales session is confirmed. The calendar invite is attached to this email.</p>
+    </td>
+  </tr>
+
+  <!-- APPOINTMENT CARD -->
+  <tr>
+    <td style="padding:24px 36px 0;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e8edf5;border-radius:12px;overflow:hidden;">
+        <tr>
+          <td style="background:#0d2137;padding:14px 20px;">
+            <table width="100%" cellpadding="0" cellspacing="0"><tbody><tr>
+              <td><span style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:#94a9c0;font-weight:600">Cancelled Appointment</span></td>
+              
+            </tr></tbody></table>
+          </td>
+        <td style="background:#0d2137;padding:14px 20px;">
+            <table width="100%" cellpadding="0" cellspacing="0"><tbody><tr>
+              
+              <td align="left"><span style="font-size:12px;color:#4a9eff;font-weight:600">#45554288035</span></td>
+            </tr></tbody></table>
+          </td></tr>
+        <tr>
+          <td width="50%" style="padding:16px 20px;border-bottom:1px solid #e8edf5;border-right:1px solid #e8edf5;vertical-align:top;">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;font-weight:600;margin-bottom:4px;">Date</div>
+            <div style="font-size:14px;color:#0d2137;font-weight:600;">${formattedDate}</div>
+          </td>
+          <td width="50%" style="padding:16px 20px;border-bottom:1px solid #e8edf5;vertical-align:top;">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;font-weight:600;margin-bottom:4px;">Time</div>
+            <div style="font-size:14px;color:#1a6fff;font-weight:600;">${slotTiming}</div>
+          </td>
+        </tr>
+        <tr>
+          <td width="50%" style="padding:16px 20px;border-right:1px solid #e8edf5;vertical-align:top;">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;font-weight:600;margin-bottom:4px;">Location</div>
+            <div style="font-size:14px;color:#0d2137;font-weight:600;">Online</div>
+          </td>
+          <td width="50%" style="padding:16px 20px;vertical-align:top;">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;font-weight:600;margin-bottom:4px;">Appointment ID</div>
+            <div style="font-size:14px;color:#0d2137;font-weight:600;">${ticketId}</div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- CALENDAR NOTE -->
+  <tr>
+    <td style="padding:16px 36px 0;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg,#e8f4ff,#f0f8ff);border:1px solid #c5dfff;border-radius:10px;">
+        <tr><td style="padding:14px 18px;">
+          <table cellpadding="0" cellspacing="0"><tr>
+            <td style="font-size:20px;padding-right:12px;vertical-align:middle;">${calIcon}</td>
+            <td style="font-size:13px;color:#1a4a80;line-height:1.5;vertical-align:middle;">${calMsg}</td>
+          </tr></table>
+        </td></tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- BUTTONS -->
+  <tr>
+    <td style="padding:20px 36px 24px;">
+      <table width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td width="48%" style="padding-right:8px;">
+          <a href="${rescheduleUrl}" style="display:block;background:#1a6fff;color:#ffffff;text-decoration:none;padding:14px 20px;border-radius:10px;font-size:14px;font-weight:600;text-align:center;">${rescheduleLabel}</a>
+        </td>
+        <td width="48%" style="padding-left:8px;">
+          <a href="${cancelUrl}" style="display:block;background:#ffffff;color:#dc2626;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:600;text-align:center;border:1.5px solid #fca5a5;">Cancel Appointment</a>
+        </td>
+      </tr></table>
+    </td>
+  </tr>
+
+  <!-- DIVIDER -->
+  <tr><td style="padding:0 36px;"><div style="height:1px;background:#f0f3f7;"></div></td></tr>
+
+  <!-- HELP -->
+  <tr>
+    <td style="padding:20px 36px;text-align:center;">
+      <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.6;">Need help? Contact your telesales representative or visit our <a href="https://www.worldfirst.com/global/help-center/" style="color:#1a6fff;text-decoration:none;font-weight:500;">Help Centre</a>.</p>
+    </td>
+  </tr>
+
+  <!-- FOOTER -->
+  <tr>
+    <td style="background:#f8fafc;border-top:1px solid #e8edf5;padding:24px 36px;">
+      <table cellpadding="0" cellspacing="0" style="margin-bottom:10px;"><tr>
+        <td style="vertical-align:middle;">
+        <img src="https://mdn.marmot-cloud.com/worldfirst/sites/38/2026/04/20260424113953863.svg" width=150 />
+        </td>
+      </tr></table>
+      <p style="margin:0 0 8px;font-size:12px;color:#94a3b8;line-height:1.7;">This email was sent by the WorldFirst Internal Telesales Team.<br/>© 2026 WorldFirst — Ant International. All rights reserved.</p>
+      <table cellpadding="0" cellspacing="0"><tr>
+        <td style="padding-right:14px;"><a href="https://www.worldfirst.com/global/privacy-policy/" style="font-size:12px;color:#64748b;text-decoration:none;">Privacy Policy</a></td>
+        <td style="padding-right:14px;"><a href="https://www.worldfirst.com/global/legal/" style="font-size:12px;color:#64748b;text-decoration:none;">Legal</a></td>
+        <td><a href="https://www.worldfirst.com/global/help-support/contact-us/" style="font-size:12px;color:#64748b;text-decoration:none;">Contact Us</a></td>
+      </tr></table>
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+}
+
+function buildOwnerHtml({ ticketId, formattedDate, slotTiming, contactEmail, successFlag }) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#f0f4f8;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4f8;padding:32px 16px;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+
+  <!-- INTERNAL BANNER -->
+  <tr>
+    <td style="background:linear-gradient(135deg,#2d1b4e,#1a0a3a);padding:10px 36px;text-align:center;">
+      <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:#c084fc;font-weight:600;">⚙ Internal — Telesales Team Only</span>
+    </td>
+  </tr>
+
+  <!-- HEADER -->
+  <tr>
+    <td style="background:#0d2137;padding:24px 36px;">
+      <table width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td>
+          <table cellpadding="0" cellspacing="0"><tr>
+            <td style="vertical-align:middle;padding:4px 0;">
+            <img src="https://mdn.marmot-cloud.com/worldfirst/sites/38/2026/04/20260424113953863.svg" width=150 />
+            </td>
+          </tr></table>
+        </td>
+        <td align="right" style="vertical-align:middle;">
+          <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:#c084fc;background:rgba(192,132,252,0.12);padding:4px 12px;border-radius:20px;border:1px solid rgba(192,132,252,0.25);">Internal</span>
+        </td>
+      </tr></table>
+    </td>
+  </tr>
+
+  <!-- HERO -->
+  <tr>
+    <td style="padding:32px 36px 24px;border-bottom:1px solid #f0f3f7;">
+      <div style="display:inline-block;padding:5px 12px;border-radius:20px;background:#f3e5f5;border:1px solid #e1bee7;margin-bottom:14px;">
+        <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#6a1b9a;">● New Assignment</span>
+      </div>
+      <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#0d2137;line-height:1.3;">You have a new telesales appointment.</h1>
+      <p style="margin:0;font-size:14px;color:#64748b;line-height:1.6;">A customer appointment has been ${successFlag.toLowerCase()} and assigned to you. The calendar invite is attached.</p>
+    </td>
+  </tr>
+
+  <!-- APPOINTMENT CARD -->
+  <tr>
+    <td style="padding:24px 36px 0;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e8edf5;border-radius:12px;overflow:hidden;">
+        <tr>
+          <td style="background:#0d2137;padding:14px 20px;">
+            <table width="100%" cellpadding="0" cellspacing="0"><tbody><tr>
+              <td><span style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:#94a9c0;font-weight:600">Cancelled Appointment</span></td>
+              
+            </tr></tbody></table>
+          </td>
+        <td style="background:#0d2137;padding:14px 20px;">
+            <table width="100%" cellpadding="0" cellspacing="0"><tbody><tr>
+              
+              <td align="left"><span style="font-size:12px;color:#4a9eff;font-weight:600">#45554288035</span></td>
+            </tr></tbody></table>
+          </td></tr>
+        <tr>
+          <td width="50%" style="padding:16px 20px;border-bottom:1px solid #e8edf5;border-right:1px solid #e8edf5;vertical-align:top;">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;font-weight:600;margin-bottom:4px;">Date</div>
+            <div style="font-size:14px;color:#0d2137;font-weight:600;">${formattedDate}</div>
+          </td>
+          <td width="50%" style="padding:16px 20px;border-bottom:1px solid #e8edf5;vertical-align:top;">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;font-weight:600;margin-bottom:4px;">Time</div>
+            <div style="font-size:14px;color:#1a6fff;font-weight:600;">${slotTiming}</div>
+          </td>
+        </tr>
+        <tr>
+          <td width="50%" style="padding:16px 20px;border-right:1px solid #e8edf5;vertical-align:top;">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;font-weight:600;margin-bottom:4px;">Customer Email</div>
+            <div style="font-size:14px;color:#0d2137;font-weight:600;">${contactEmail}</div>
+          </td>
+          <td width="50%" style="padding:16px 20px;vertical-align:top;">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;font-weight:600;margin-bottom:4px;">Location</div>
+            <div style="font-size:14px;color:#0d2137;font-weight:600;">Online</div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- CALENDAR NOTE -->
+  <tr>
+    <td style="padding:16px 36px 28px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg,#e8f4ff,#f0f8ff);border:1px solid #c5dfff;border-radius:10px;">
+        <tr><td style="padding:14px 18px;">
+          <table cellpadding="0" cellspacing="0"><tr>
+            <td style="font-size:20px;padding-right:12px;vertical-align:middle;">📅</td>
+            <td style="font-size:13px;color:#1a4a80;line-height:1.5;vertical-align:middle;">The calendar invite is attached. Open it to add this appointment to your calendar.</td>
+          </tr></table>
+        </td></tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- DIVIDER -->
+  <tr><td style="padding:0 36px;"><div style="height:1px;background:#f0f3f7;"></div></td></tr>
+
+  <!-- HELP -->
+  <tr>
+    <td style="padding:20px 36px;text-align:center;">
+      <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.6;">This is an internal notification from the WorldFirst telesales booking system.<br/>For issues, contact your team administrator.</p>
+    </td>
+  </tr>
+
+  <!-- FOOTER -->
+  <tr>
+    <td style="background:#f8fafc;border-top:1px solid #e8edf5;padding:24px 36px;">
+      <table cellpadding="0" cellspacing="0" style="margin-bottom:10px;"><tr>
+        <td style="vertical-align:middle;">
+        <img src="https://mdn.marmot-cloud.com/worldfirst/sites/38/2026/04/20260424113953863.svg" width=150 />
+        </td>
+      </tr></table>
+      <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.7;">Internal use only — WorldFirst Telesales Booking System.<br/>© 2026 WorldFirst — Ant International.</p>
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+}
+
+function buildCancelHtml({ ticketId, formattedDate, slotTiming }) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+</head>
+
+<body style="margin:0;padding:0;background:#f0f4f8;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4f8;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+
+        <!-- HEADER -->
+        <tr>
+          <td style="background:#0d2137;padding:24px 36px;">
+
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+
+                <td style="vertical-align:middle;">
+                  <img 
+                    src="https://mdn.marmot-cloud.com/worldfirst/sites/38/2026/04/20260424113953863.svg"
+                    width="150"
+                    alt="WorldFirst"
+                    style="display:block;border:0;"
+                  />
+                </td>
+
+                <td align="right" style="vertical-align:middle;">
+                  <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:#4a9eff;background:rgba(74,158,255,0.12);padding:4px 12px;border-radius:20px;border:1px solid rgba(74,158,255,0.25);">
+                    Telesales
+                  </span>
+                </td>
+
+              </tr>
+            </table>
+
+          </td>
+        </tr>
+
+        <!-- HERO -->
+        <tr>
+          <td style="padding:32px 36px 24px;border-bottom:1px solid #f0f3f7;">
+
+            <div style="display:inline-block;padding:5px 12px;border-radius:20px;background:#fce4ec;border:1px solid #f8bbd9;margin-bottom:14px;">
+              <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#c62828;">
+                ● Appointment Cancelled
+              </span>
+            </div>
+
+            <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#0d2137;line-height:1.3;">
+              Your appointment has been cancelled.
+            </h1>
+
+            <p style="margin:0;font-size:14px;color:#64748b;line-height:1.6;">
+              Your telesales appointment has been successfully cancelled.
+              Open the attached file to remove it from your calendar.
+            </p>
+
+          </td>
+        </tr>
+
+        <!-- APPOINTMENT CARD -->
+        <tr>
+          <td style="padding:24px 36px 0;">
+
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e8edf5;border-radius:12px;overflow:hidden;">
+
+              <!-- CARD HEADER -->
+              <tr>
+
+                <td style="background:#0d2137;padding:14px 20px;">
+                  <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td>
+                        <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:#94a9c0;font-weight:600;">
+                          Cancelled Appointment
+                        </span>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+
+                <td style="background:#0d2137;padding:14px 20px;">
+                  <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td align="left">
+                        <span style="font-size:12px;color:#4a9eff;font-weight:600;">
+                          #45554288035
+                        </span>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+
+              </tr>
+
+              <!-- DATE + TIME -->
+              <tr>
+
+                <td width="50%" style="padding:16px 20px;border-bottom:1px solid #e8edf5;border-right:1px solid #e8edf5;vertical-align:top;">
+                  <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;font-weight:600;margin-bottom:4px;">
+                    Date
+                  </div>
+
+                  <div style="font-size:14px;color:#0d2137;font-weight:600;">
+                    ${formattedDate}
+                  </div>
+                </td>
+
+                <td width="50%" style="padding:16px 20px;border-bottom:1px solid #e8edf5;vertical-align:top;">
+                  <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;font-weight:600;margin-bottom:4px;">
+                    Time
+                  </div>
+
+                  <div style="font-size:14px;color:#0d2137;font-weight:600;">
+                    ${slotTiming}
+                  </div>
+                </td>
+
+              </tr>
+
+              <!-- STATUS + ID -->
+              <tr>
+
+                <td width="50%" style="padding:16px 20px;border-right:1px solid #e8edf5;vertical-align:top;">
+                  <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;font-weight:600;margin-bottom:4px;">
+                    Status
+                  </div>
+
+                  <div style="font-size:14px;color:#dc2626;font-weight:600;">
+                    Cancelled
+                  </div>
+                </td>
+
+                <td width="50%" style="padding:16px 20px;vertical-align:top;">
+                  <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;font-weight:600;margin-bottom:4px;">
+                    Appointment ID
+                  </div>
+
+                  <div style="font-size:14px;color:#0d2137;font-weight:600;">
+                    ${ticketId}
+                  </div>
+                </td>
+
+              </tr>
+
+            </table>
+
+          </td>
+        </tr>
+
+        <!-- CANCEL NOTE -->
+        <tr>
+          <td style="padding:16px 36px 24px;">
+
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg,#fff3e0,#fff8ee);border:1px solid #ffcc80;border-radius:10px;">
+              <tr>
+                <td style="padding:14px 18px;">
+
+                  <table cellpadding="0" cellspacing="0">
+                    <tr>
+
+                      <td style="font-size:20px;padding-right:12px;vertical-align:middle;">
+                        ⚠️
+                      </td>
+
+                      <td style="font-size:13px;color:#e65100;line-height:1.5;vertical-align:middle;">
+                        Open the attached <strong>cancel.ics</strong> file to automatically remove this event from your calendar.
+                      </td>
+
+                    </tr>
+                  </table>
+
+                </td>
+              </tr>
+            </table>
+
+          </td>
+        </tr>
+
+        <!-- DIVIDER -->
+        <tr>
+          <td style="padding:0 36px;">
+            <div style="height:1px;background:#f0f3f7;"></div>
+          </td>
+        </tr>
+
+        <!-- HELP -->
+        <tr>
+          <td style="padding:20px 36px;text-align:center;">
+
+            <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.6;">
+              Changed your mind?
+              <a href="https://www.worldfirst.com/global/help-support/contact-us/" style="color:#1a6fff;text-decoration:none;font-weight:500;">
+                Contact us
+              </a>
+              to book a new appointment.
+              <br/>
+              We look forward to speaking with you.
+            </p>
+
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td style="background:#f8fafc;border-top:1px solid #e8edf5;padding:24px 36px;">
+
+            <table cellpadding="0" cellspacing="0" style="margin-bottom:10px;">
+              <tr>
+                <td style="vertical-align:middle;">
+
+                  <img 
+                    src="https://mdn.marmot-cloud.com/worldfirst/sites/38/2026/04/20260424113953863.svg"
+                    width="150"
+                    alt="WorldFirst"
+                    style="display:block;border:0;"
+                  />
+
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:0 0 8px;font-size:12px;color:#94a3b8;line-height:1.7;">
+              This email was sent by the WorldFirst Internal Telesales Team.
+              <br/>
+              © 2026 WorldFirst — Ant International. All rights reserved.
+            </p>
+
+            <table cellpadding="0" cellspacing="0">
+              <tr>
+
+                <td style="padding-right:14px;">
+                  <a href="https://www.worldfirst.com/global/privacy-policy/" style="font-size:12px;color:#64748b;text-decoration:none;">
+                    Privacy Policy
+                  </a>
+                </td>
+
+                <td style="padding-right:14px;">
+                  <a href="https://www.worldfirst.com/global/legal/" style="font-size:12px;color:#64748b;text-decoration:none;">
+                    Legal
+                  </a>
+                </td>
+
+                <td>
+                  <a href="https://www.worldfirst.com/global/help-support/contact-us/" style="font-size:12px;color:#64748b;text-decoration:none;">
+                    Contact Us
+                  </a>
+                </td>
+
+              </tr>
+            </table>
+
+          </td>
+        </tr>
+
+      </table>
+
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>`;
+}
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -82,6 +640,49 @@ const splitParts = (subject) =>
     .split("#")
     .map((p) => normalize(p));
 
+// ── Find Available Owner (Round Robin) ───────────────────────
+
+async function findAvailableOwner({ currentOwnerId, region, dateKey, slotKey, headers }) {
+  const pool   = OWNER_POOL[region] || [];
+  const stages = PIPELINE_STAGES[region];
+
+  console.log(`🔄 Round Robin — checking ${pool.length} owners in pool for ${region}`);
+
+  for (const ownerId of pool) {
+    if (ownerId === currentOwnerId) continue;
+
+    const res = await axios.post(
+      "https://api.hubapi.com/crm/v3/objects/tickets/search",
+      {
+        filterGroups: [{
+          filters: [
+            { propertyName: "hubspot_owner_id", operator: "EQ", value: ownerId },
+            { propertyName: "hs_pipeline_stage", operator: "EQ", value: stages.SCHEDULED },
+          ],
+        }],
+        properties: ["hs_object_id", "subject"],
+        limit: 100,
+      },
+      { headers }
+    );
+
+    const hasConflict = (res?.data?.results || []).some((t) => {
+      const p = splitParts(String(t?.properties?.subject || ""));
+      return p.length >= 2 && `${p[0]}#${p[1]}` === `${dateKey}#${slotKey}`;
+    });
+
+    if (!hasConflict) {
+      console.log(`✅ Found available owner: ${ownerId}`);
+      return ownerId;
+    }
+
+    console.log(`⚠️ Owner ${ownerId} also has conflict — trying next`);
+  }
+
+  console.log(`❌ All owners busy for ${dateKey} ${slotKey}`);
+  return null;
+}
+
 // ── Reschedule Check ─────────────────────────────────────────
 
 async function handleRescheduleCheck({ ticketId, region, headers }) {
@@ -118,7 +719,6 @@ async function handleRescheduleCheck({ ticketId, region, headers }) {
   }
 
   const successFlag = isReschedule ? "Rescheduled" : "Scheduled";
-
   console.log(`✅ Reschedule Check — ticketId: ${ticketId} | isReschedule: ${isReschedule} | successFlag: ${successFlag}`);
   return { is_reschedule_stage: isReschedule, successFlag, region };
 }
@@ -211,6 +811,9 @@ async function handleSlotConflict({ ticketId, region, headers }) {
     contact_conflict:       contactConflict,
     owner_conflict:         ownerConflict,
     slot_key:               myKey3,
+    date_key:               dateOfAppointment,
+    time_key:               slotTiming,
+    current_owner_id:       ownerId,
     region_used:            region,
     contact_conflict_count: contactConflictTickets.length,
     owner_conflict_count:   ownerConflictTickets.length,
@@ -229,94 +832,107 @@ async function handleConflict({ ticketId, region, successFlag, conflictData, hea
     owner_conflict,
     contact_conflict_count,
     owner_conflict_count,
+    date_key,
+    time_key,
+    current_owner_id,
   } = conflictData;
 
   if (!is_conflicted) return { success: true, reason: "No conflict detected." };
 
-  // ── Contact Conflict ─────────────────────────────────────
+  // ── Contact Conflict → always Out of Slot ────────────────
   if (contact_conflict) {
     await axios.patch(
       `https://api.hubapi.com/crm/v3/objects/tickets/${ticketId}`,
       { properties: { hs_pipeline_stage: stages.OUT_OF_SLOT } },
       { headers }
     );
-
-    await axios.post(
-      "https://api.hubapi.com/crm/v3/objects/tasks",
-      {
-        properties: {
-          hs_task_subject: `[Ticket ${successFlag} Conflicted] Schedule conflicted with another ticket`,
-          hs_task_type:    "TODO",
-          hs_timestamp:    Date.now(),
-          hs_task_status:  "NOT_STARTED",
-        },
-        associations: [{ to: { id: ticketId }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 26 }] }],
+    await axios.post("https://api.hubapi.com/crm/v3/objects/tasks", {
+      properties: {
+        hs_task_subject: `[Ticket ${successFlag} Conflicted] Schedule conflicted with another ticket`,
+        hs_task_type:    "TODO",
+        hs_timestamp:    Date.now(),
+        hs_task_status:  "NOT_STARTED",
       },
-      { headers }
-    );
-
-    await axios.post(
-      "https://api.hubapi.com/crm/v3/objects/notes",
-      {
-        properties: {
-          hs_note_body: [
-            `[Conflict ${successFlag}] This customer has been scheduled for the same timing with the owner.`,
-            `This ticket move to out of slot stage by the system because schedule assignment has been conflicted with another scheduled meeting in the same timing.`,
-            ``,
-            `Contact conflict count: ${contact_conflict_count} record`,
-          ].join("\n"),
-          hs_timestamp: Date.now(),
-        },
-        associations: [{ to: { id: ticketId }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 18 }] }],
+      associations: [{ to: { id: ticketId }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 26 }] }],
+    }, { headers });
+    await axios.post("https://api.hubapi.com/crm/v3/objects/notes", {
+      properties: {
+        hs_note_body: [
+          `[Conflict ${successFlag}] This customer has been scheduled for the same timing with the owner.`,
+          `This ticket moved to out of slot stage because the schedule conflicted with another meeting in the same timing.`,
+          ``,
+          `Contact conflict count: ${contact_conflict_count} record`,
+        ].join("\n"),
+        hs_timestamp: Date.now(),
       },
-      { headers }
-    );
-
+      associations: [{ to: { id: ticketId }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 18 }] }],
+    }, { headers });
     console.log(`✅ Contact conflict handled for ticketId: ${ticketId}`);
     return { success: true, conflict_type: "contact", action_taken: "Out of Slot, Task & Note created" };
   }
 
-  // ── Owner Conflict ───────────────────────────────────────
+  // ── Owner Conflict → try Round Robin first ───────────────
   if (owner_conflict) {
+    const newOwnerId = await findAvailableOwner({
+      currentOwnerId: current_owner_id,
+      region,
+      dateKey: date_key,
+      slotKey: time_key,
+      headers,
+    });
+
+    // Available owner found → reassign ──────────────────────
+    if (newOwnerId) {
+      await axios.patch(
+        `https://api.hubapi.com/crm/v3/objects/tickets/${ticketId}`,
+        { properties: { hubspot_owner_id: newOwnerId } },
+        { headers }
+      );
+      await axios.post("https://api.hubapi.com/crm/v3/objects/notes", {
+        properties: {
+          hs_note_body: [
+            `[${successFlag} Reassigned] Owner conflict detected.`,
+            `Original owner was busy at this time slot.`,
+            `Ticket has been reassigned to a new available owner: ${newOwnerId}`,
+          ].join("\n"),
+          hs_timestamp: Date.now(),
+        },
+        associations: [{ to: { id: ticketId }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 18 }] }],
+      }, { headers });
+      console.log(`✅ Owner conflict resolved — reassigned ticket ${ticketId} to owner ${newOwnerId}`);
+      return { success: true, conflict_type: "owner", action_taken: "Reassigned to available owner" };
+    }
+
+    // All owners busy → Out of Slot ─────────────────────────
     await axios.patch(
       `https://api.hubapi.com/crm/v3/objects/tickets/${ticketId}`,
       { properties: { hs_pipeline_stage: stages.OUT_OF_SLOT } },
       { headers }
     );
-
-    await axios.post(
-      "https://api.hubapi.com/crm/v3/objects/tasks",
-      {
-        properties: {
-          hs_task_subject: `[Ticket ${successFlag} Conflicted] Schedule conflicted with another ticket`,
-          hs_task_type:    "TODO",
-          hs_timestamp:    Date.now(),
-          hs_task_status:  "NOT_STARTED",
-        },
-        associations: [{ to: { id: ticketId }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 26 }] }],
+    await axios.post("https://api.hubapi.com/crm/v3/objects/tasks", {
+      properties: {
+        hs_task_subject: `[Ticket ${successFlag} Conflicted] All owners busy — manual assignment needed`,
+        hs_task_type:    "TODO",
+        hs_timestamp:    Date.now(),
+        hs_task_status:  "NOT_STARTED",
       },
-      { headers }
-    );
-
-    await axios.post(
-      "https://api.hubapi.com/crm/v3/objects/notes",
-      {
-        properties: {
-          hs_note_body: [
-            `[Conflict ${successFlag}] The owner has been scheduled for the same timing with customer.`,
-            `This ticket move to out of slot stage by the system because schedule assignment has been conflicted with another owner in the same timing.`,
-            ``,
-            `Owner conflict count: ${owner_conflict_count} record`,
-          ].join("\n"),
-          hs_timestamp: Date.now(),
-        },
-        associations: [{ to: { id: ticketId }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 18 }] }],
+      associations: [{ to: { id: ticketId }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 26 }] }],
+    }, { headers });
+    await axios.post("https://api.hubapi.com/crm/v3/objects/notes", {
+      properties: {
+        hs_note_body: [
+          `[Conflict ${successFlag}] Owner conflict detected.`,
+          `Round Robin attempted — all ${OWNER_POOL[region]?.length || 0} owners are busy at this time slot.`,
+          `This ticket moved to Out of Slot. Manual assignment needed.`,
+          ``,
+          `Owner conflict count: ${owner_conflict_count} record`,
+        ].join("\n"),
+        hs_timestamp: Date.now(),
       },
-      { headers }
-    );
-
-    console.log(`✅ Owner conflict handled for ticketId: ${ticketId}`);
-    return { success: true, conflict_type: "owner", action_taken: "Out of Slot, Task & Note created" };
+      associations: [{ to: { id: ticketId }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 18 }] }],
+    }, { headers });
+    console.log(`✅ Owner conflict — all owners busy — ticket ${ticketId} moved to Out of Slot`);
+    return { success: true, conflict_type: "owner", action_taken: "All owners busy — Out of Slot, Task & Note created" };
   }
 
   return { success: true, reason: "is_conflicted was true but no specific conflict branch matched." };
@@ -337,7 +953,6 @@ async function handleScheduled({ ticketId, region, successFlag, headers }) {
 
   const props             = ticketRes?.data?.properties || {};
   const ownerId           = String(props?.hubspot_owner_id || "").trim();
-  const subject           = String(props?.subject || "").trim();
   const content           = String(props?.content || "").trim();
   const dateOfAppointment = String(props?.date_of_appointment || "").trim();
   const slotTiming        = String(props?.slot_timing || "").trim();
@@ -348,7 +963,6 @@ async function handleScheduled({ ticketId, region, successFlag, headers }) {
   }
 
   const ownerEmail    = await fetchOwnerEmail(ownerId, headers);
-  const notifyEmail   = ownerEmail;
   const action        = successFlag === "Rescheduled" ? "reschedule" : "new";
   const formattedDate = formatDateForEmail(dateOfAppointment);
 
@@ -359,7 +973,7 @@ async function handleScheduled({ ticketId, region, successFlag, headers }) {
     { headers }
   );
 
-  const contactId = assocRes?.data?.results?.[0]?.id || "";
+  const contactId      = assocRes?.data?.results?.[0]?.id || "";
   let contactFirstName = "";
   let contactLastName  = "";
   let contactEmail     = "";
@@ -384,84 +998,50 @@ async function handleScheduled({ ticketId, region, successFlag, headers }) {
   console.log(`✅ Ticket ${ticketId} moved to Scheduled`);
 
   // ── 2) Create Note ───────────────────────────────────────
-  await axios.post(
-    "https://api.hubapi.com/crm/v3/objects/notes",
-    {
-      properties: {
-        hs_note_body: [
-          `[${successFlag}] This request has been scheduled.`,
-          `Appointment ID: ${ticketId}`,
-          `Owner: ${ownerEmail}`,
-          `Date of appointment: ${formattedDate}`,
-          `Time slot: ${slotTiming}`,
-          `Purpose: ${content}`,
-          `Contact Name: ${contactFirstName} ${contactLastName}`,
-          `Contact Email: ${contactEmail}`,
-        ].join("\n"),
-        hs_timestamp: Date.now(),
-      },
-      associations: [{ to: { id: ticketId }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 18 }] }],
+  await axios.post("https://api.hubapi.com/crm/v3/objects/notes", {
+    properties: {
+      hs_note_body: [
+        `[${successFlag}] This request has been scheduled.`,
+        `Appointment ID: ${ticketId}`,
+        `Owner: ${ownerEmail}`,
+        `Date of appointment: ${formattedDate}`,
+        `Time slot: ${slotTiming}`,
+        `Purpose: ${content}`,
+        `Contact Name: ${contactFirstName} ${contactLastName}`,
+        `Contact Email: ${contactEmail}`,
+      ].join("\n"),
+      hs_timestamp: Date.now(),
     },
-    { headers }
-  );
+    associations: [{ to: { id: ticketId }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 18 }] }],
+  }, { headers });
   console.log(`✅ Note created for ticketId: ${ticketId}`);
 
-  // ── Build Cancel URL ─────────────────────────────────────
+  // ── Build URLs ───────────────────────────────────────────
   const cancelUrl = `https://campaign.worldfirst.com/${region.toLowerCase()}-cancellation-appointment` +
     `?title=${encodeURIComponent(content)}` +
     `&date=${encodeURIComponent(formattedDate)}` +
     `&time=${encodeURIComponent(slotTiming)}` +
-    `&id=${ticketId}` +
-    `&ticket_id=${ticketId}` +
+    `&id=${ticketId}&ticket_id=${ticketId}` +
     `&email=${encodeURIComponent(contactEmail)}` +
     `&region=${encodeURIComponent(region)}` +
     `&uid=${encodeURIComponent(`hs-${ticketId}@woven.sg`)}`;
 
-  // ── Build Reschedule URL ─────────────────────────────────
   const rescheduleUrl = `https://campaign.worldfirst.com/${region.toLowerCase()}-rescheduling-appointment-page` +
     `?title=${encodeURIComponent(content)}` +
     `&date=${encodeURIComponent(formattedDate)}` +
     `&time=${encodeURIComponent(slotTiming)}` +
-    `&id=${ticketId}` +
-    `&ticket_id=${ticketId}` +
+    `&id=${ticketId}&ticket_id=${ticketId}` +
     `&email=${encodeURIComponent(contactEmail)}` +
     `&region=${encodeURIComponent(region)}`;
 
-  // ── Build Customer HTML ──────────────────────────────────
-  const customerHtml = `
-    <p>Your telesales appointment has been ${successFlag.toLowerCase()}.</p>
-    <p>
-      <strong>Appointment ID:</strong> ${ticketId}<br/>
-      <strong>Date:</strong> ${formattedDate}<br/>
-      <strong>Time:</strong> ${slotTiming}<br/>
-      <strong>Location:</strong> Online
-    </p>
-    <p>The calendar invite is attached.</p>
-    <table style="margin-top:20px;">
-      <tr>
-        <td style="padding-right:10px;">
-          <a href="${rescheduleUrl}"
-             style="display:inline-block;padding:10px 18px;background:#3182ce;color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;">
-            Reschedule
-          </a>
-        </td>
-        <td>
-          <a href="${cancelUrl}"
-             style="display:inline-block;padding:10px 18px;background:#e53e3e;color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;">
-            Cancel Appointment
-          </a>
-        </td>
-      </tr>
-    </table>
-    <p style="margin-top:14px;color:#999;font-size:12px;">
-      Use the buttons above to reschedule or cancel your appointment.
-    </p>
-  `;
+  // ── Build Email HTML ─────────────────────────────────────
+  const customerHtml = buildCustomerHtml({ ticketId, formattedDate, slotTiming, successFlag, rescheduleUrl, cancelUrl });
+  const ownerHtml    = buildOwnerHtml({ ticketId, formattedDate, slotTiming, contactEmail, successFlag });
 
   // ── 3) Send Customer ICS Email ───────────────────────────
   if (contactEmail) {
     try {
-      const customerPayload = {
+      await axios.post(SERVERLESS_URL, {
         to:                  contactEmail,
         from_email:          FROM_EMAIL,
         fromName:            "Internal Telesales Team",
@@ -472,26 +1052,21 @@ async function handleScheduled({ ticketId, region, successFlag, headers }) {
         time:                slotTiming,
         telesales:           ownerEmail,
         location:            "Online",
-        action:              action,
-        timezoneOffsetHours: timezoneOffsetHours,
+        action,
+        timezoneOffsetHours,
         html:                customerHtml,
-      };
-      console.log("📤 SENDING CUSTOMER ICS EMAIL:", customerPayload);
-      const customerRes = await axios.post(SERVERLESS_URL, customerPayload, {
-        headers: { "Content-Type": "application/json" },
-        timeout: 20000,
-      });
-      console.log("✅ CUSTOMER EMAIL RESPONSE:", customerRes.data);
+      }, { headers: { "Content-Type": "application/json" }, timeout: 20000 });
+      console.log(`✅ Customer ICS email sent`);
     } catch (err) {
       console.error(`⚠️ Customer ICS email failed:`, err.response?.data || err.message);
     }
   }
 
   // ── 4) Send Owner ICS Email ──────────────────────────────
-  if (notifyEmail) {
+  if (ownerEmail) {
     try {
-      const ownerPayload = {
-        to:                  notifyEmail,
+      await axios.post(SERVERLESS_URL, {
+        to:                  ownerEmail,
         from_email:          FROM_EMAIL,
         fromName:            "Internal Telesales Team",
         title:               "Telesales Appointment",
@@ -501,26 +1076,17 @@ async function handleScheduled({ ticketId, region, successFlag, headers }) {
         time:                slotTiming,
         telesales:           ownerEmail,
         location:            "Online",
-        action:              action,
-        timezoneOffsetHours: timezoneOffsetHours,
-      };
-      console.log("📤 SENDING OWNER ICS EMAIL:", ownerPayload);
-      const ownerRes = await axios.post(SERVERLESS_URL, ownerPayload, {
-        headers: { "Content-Type": "application/json" },
-        timeout: 20000,
-      });
-      console.log("✅ OWNER EMAIL RESPONSE:", ownerRes.data);
+        action,
+        timezoneOffsetHours,
+        html:                ownerHtml,
+      }, { headers: { "Content-Type": "application/json" }, timeout: 20000 });
+      console.log(`✅ Owner ICS email sent`);
     } catch (err) {
       console.error(`⚠️ Owner ICS email failed:`, err.response?.data || err.message);
     }
   }
 
-  return {
-    success:     true,
-    owner:       ownerEmail,
-    region_used: region,
-    action:      action,
-  };
+  return { success: true, owner: ownerEmail, region_used: region, action };
 }
 
 // ── Reschedule Submission ────────────────────────────────────
@@ -557,17 +1123,13 @@ async function handleRescheduleSubmission({ contactId, payload, headers }) {
     { headers }
   );
 
-  await axios.post(
-    "https://api.hubapi.com/crm/v3/objects/notes",
-    {
-      properties: {
-        hs_note_body: "[Rescheduled] Customer rescheduled this ticket.",
-        hs_timestamp: Date.now(),
-      },
-      associations: [{ to: { id: ticketId }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 18 }] }],
+  await axios.post("https://api.hubapi.com/crm/v3/objects/notes", {
+    properties: {
+      hs_note_body: "[Rescheduled] Customer rescheduled this ticket.",
+      hs_timestamp: Date.now(),
     },
-    { headers }
-  );
+    associations: [{ to: { id: ticketId }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 18 }] }],
+  }, { headers });
 
   console.log(`✅ Reschedule submission complete — ticketId: ${ticketId}`);
   return { status: "updated", ticket_id: ticketId, date_ms: dateMs, time_text: timeText, region_used: region };
@@ -578,7 +1140,6 @@ async function handleRescheduleSubmission({ contactId, payload, headers }) {
 async function handleCancelSubmission({ contactId, ticketId, headers }) {
   if (!ticketId) throw new Error("request_cancel_ticket_id is empty.");
 
-  // ── Fetch full ticket details ────────────────────────────
   const ticketRes = await axios.get(
     `https://api.hubapi.com/crm/v3/objects/tickets/${ticketId}?properties=region,hs_pipeline_stage,hubspot_owner_id,date_of_appointment,slot_timing`,
     { headers }
@@ -594,11 +1155,8 @@ async function handleCancelSubmission({ contactId, ticketId, headers }) {
 
   const timezoneOffsetHours = TIMEZONE_OFFSET[region] ?? 0;
   const formattedDate       = formatDateForEmail(dateOfAppointment);
+  const ownerEmail          = ownerId ? await fetchOwnerEmail(ownerId, headers) : "";
 
-  // ── Fetch owner email ────────────────────────────────────
-  const ownerEmail = ownerId ? await fetchOwnerEmail(ownerId, headers) : "";
-
-  // ── Fetch associated contact email ───────────────────────
   const assocRes = await axios.get(
     `https://api.hubapi.com/crm/v3/objects/tickets/${ticketId}/associations/contacts`,
     { headers }
@@ -624,23 +1182,22 @@ async function handleCancelSubmission({ contactId, ticketId, headers }) {
   console.log(`✅ Ticket ${ticketId} moved to Cancelled`);
 
   // ── 2) Create Note ───────────────────────────────────────
-  await axios.post(
-    "https://api.hubapi.com/crm/v3/objects/notes",
-    {
-      properties: {
-        hs_note_body: "[Cancel] Customer cancelled this request.",
-        hs_timestamp: Date.now(),
-      },
-      associations: [{ to: { id: ticketId }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 18 }] }],
+  await axios.post("https://api.hubapi.com/crm/v3/objects/notes", {
+    properties: {
+      hs_note_body: "[Cancel] Customer cancelled this request.",
+      hs_timestamp: Date.now(),
     },
-    { headers }
-  );
+    associations: [{ to: { id: ticketId }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 18 }] }],
+  }, { headers });
   console.log(`✅ Cancel note created for ticketId: ${ticketId}`);
+
+  // ── Build Cancel HTML ────────────────────────────────────
+  const cancelHtml = buildCancelHtml({ ticketId, formattedDate, slotTiming });
 
   // ── 3) Send Cancel ICS Email to Customer ─────────────────
   if (contactEmail) {
     try {
-      const customerCancelPayload = {
+      await axios.post(SERVERLESS_URL, {
         to:                  contactEmail,
         from_email:          FROM_EMAIL,
         fromName:            "Internal Telesales Team",
@@ -652,14 +1209,10 @@ async function handleCancelSubmission({ contactId, ticketId, headers }) {
         telesales:           ownerEmail,
         location:            "Online",
         action:              "cancel",
-        timezoneOffsetHours: timezoneOffsetHours,
-      };
-      console.log("📤 SENDING CUSTOMER CANCEL ICS EMAIL:", customerCancelPayload);
-      const customerRes = await axios.post(SERVERLESS_URL, customerCancelPayload, {
-        headers: { "Content-Type": "application/json" },
-        timeout: 20000,
-      });
-      console.log("✅ CUSTOMER CANCEL EMAIL RESPONSE:", customerRes.data);
+        timezoneOffsetHours,
+        html:                cancelHtml,
+      }, { headers: { "Content-Type": "application/json" }, timeout: 20000 });
+      console.log(`✅ Customer cancel ICS email sent`);
     } catch (err) {
       console.error(`⚠️ Customer cancel ICS email failed:`, err.response?.data || err.message);
     }
@@ -668,7 +1221,7 @@ async function handleCancelSubmission({ contactId, ticketId, headers }) {
   // ── 4) Send Cancel ICS Email to Owner ────────────────────
   if (ownerEmail) {
     try {
-      const ownerCancelPayload = {
+      await axios.post(SERVERLESS_URL, {
         to:                  ownerEmail,
         from_email:          FROM_EMAIL,
         fromName:            "Internal Telesales Team",
@@ -680,14 +1233,10 @@ async function handleCancelSubmission({ contactId, ticketId, headers }) {
         telesales:           ownerEmail,
         location:            "Online",
         action:              "cancel",
-        timezoneOffsetHours: timezoneOffsetHours,
-      };
-      console.log("📤 SENDING OWNER CANCEL ICS EMAIL:", ownerCancelPayload);
-      const ownerRes = await axios.post(SERVERLESS_URL, ownerCancelPayload, {
-        headers: { "Content-Type": "application/json" },
-        timeout: 20000,
-      });
-      console.log("✅ OWNER CANCEL EMAIL RESPONSE:", ownerRes.data);
+        timezoneOffsetHours,
+        html:                cancelHtml,
+      }, { headers: { "Content-Type": "application/json" }, timeout: 20000 });
+      console.log(`✅ Owner cancel ICS email sent`);
     } catch (err) {
       console.error(`⚠️ Owner cancel ICS email failed:`, err.response?.data || err.message);
     }
@@ -761,112 +1310,57 @@ exports.main = async (context) => {
 
     try {
 
-      // ── TICKET: Owner Assigned → known ───────────────────
-      if (
-        eventType === "ticket.propertyChange" &&
-        propertyName === "hubspot_owner_id" &&
-        newValue
-      ) {
+      // ── TICKET: Owner Assigned ────────────────────────────
+      if (eventType === "ticket.propertyChange" && propertyName === "hubspot_owner_id" && newValue) {
         const ticketProps  = await fetchTicketProps(objectId, headers);
         const region       = String(ticketProps?.region || "").trim().toUpperCase();
         const currentStage = String(ticketProps?.hs_pipeline_stage || "").trim();
-
-        if (!PIPELINE_STAGES[region]) {
-          console.log(`⏭️ Unsupported region ${region} — skipping`);
-          continue;
-        }
-
-        if (isSkippableStage(region, currentStage)) {
-          console.log(`⏭️ Ticket ${objectId} already in ${currentStage} — skipping`);
-          continue;
-        }
-
-        console.log(`🎯 Owner assigned for ticket ${objectId} (${region}) — running allocation`);
+        if (!PIPELINE_STAGES[region]) { console.log(`⏭️ Unsupported region ${region}`); continue; }
+        if (isSkippableStage(region, currentStage)) { console.log(`⏭️ Skipping ${objectId} — ${currentStage}`); continue; }
+        console.log(`🎯 Owner assigned for ticket ${objectId} (${region})`);
         await runAllocationFlow({ ticketId: objectId, region, headers });
         continue;
       }
 
-      // ── TICKET: Slot Timing → known ──────────────────────
-      if (
-        eventType === "ticket.propertyChange" &&
-        propertyName === "slot_timing" &&
-        newValue
-      ) {
+      // ── TICKET: Slot Timing ───────────────────────────────
+      if (eventType === "ticket.propertyChange" && propertyName === "slot_timing" && newValue) {
         const ticketProps  = await fetchTicketProps(objectId, headers);
         const region       = String(ticketProps?.region || "").trim().toUpperCase();
         const currentStage = String(ticketProps?.hs_pipeline_stage || "").trim();
         const ownerId      = String(ticketProps?.hubspot_owner_id || "").trim();
-
-        if (!PIPELINE_STAGES[region]) {
-          console.log(`⏭️ Unsupported region ${region} — skipping`);
-          continue;
-        }
-
-        if (isSkippableStage(region, currentStage)) {
-          console.log(`⏭️ Ticket ${objectId} already in ${currentStage} — skipping`);
-          continue;
-        }
-
-        if (!ownerId) {
-          console.log(`⏭️ No owner yet for ticket ${objectId} — skipping`);
-          continue;
-        }
-
-        console.log(`🎯 Slot timing changed for ticket ${objectId} (${region}) — running allocation`);
+        if (!PIPELINE_STAGES[region]) { console.log(`⏭️ Unsupported region ${region}`); continue; }
+        if (isSkippableStage(region, currentStage)) { console.log(`⏭️ Skipping ${objectId} — ${currentStage}`); continue; }
+        if (!ownerId) { console.log(`⏭️ No owner yet for ${objectId}`); continue; }
+        console.log(`🎯 Slot timing changed for ticket ${objectId} (${region})`);
         await runAllocationFlow({ ticketId: objectId, region, headers });
         continue;
       }
 
-      // ── TICKET: Date of Appointment → known ──────────────
-      if (
-        eventType === "ticket.propertyChange" &&
-        propertyName === "date_of_appointment" &&
-        newValue
-      ) {
+      // ── TICKET: Date of Appointment ───────────────────────
+      if (eventType === "ticket.propertyChange" && propertyName === "date_of_appointment" && newValue) {
         const ticketProps  = await fetchTicketProps(objectId, headers);
         const region       = String(ticketProps?.region || "").trim().toUpperCase();
         const currentStage = String(ticketProps?.hs_pipeline_stage || "").trim();
         const ownerId      = String(ticketProps?.hubspot_owner_id || "").trim();
-
-        if (!PIPELINE_STAGES[region]) {
-          console.log(`⏭️ Unsupported region ${region} — skipping`);
-          continue;
-        }
-
-        if (isSkippableStage(region, currentStage)) {
-          console.log(`⏭️ Ticket ${objectId} already in ${currentStage} — skipping`);
-          continue;
-        }
-
-        if (!ownerId) {
-          console.log(`⏭️ No owner yet for ticket ${objectId} — skipping`);
-          continue;
-        }
-
-        console.log(`🎯 Date changed for ticket ${objectId} (${region}) — running allocation`);
+        if (!PIPELINE_STAGES[region]) { console.log(`⏭️ Unsupported region ${region}`); continue; }
+        if (isSkippableStage(region, currentStage)) { console.log(`⏭️ Skipping ${objectId} — ${currentStage}`); continue; }
+        if (!ownerId) { console.log(`⏭️ No owner yet for ${objectId}`); continue; }
+        console.log(`🎯 Date changed for ticket ${objectId} (${region})`);
         await runAllocationFlow({ ticketId: objectId, region, headers });
         continue;
       }
 
-      // ── CONTACT: Reschedule Payload → known ──────────────
-      if (
-        eventType === "contact.propertyChange" &&
-        propertyName === "request_reschedule_payload" &&
-        newValue
-      ) {
-        console.log(`🎯 Reschedule payload for contact ${objectId} — running reschedule submission`);
+      // ── CONTACT: Reschedule Payload ───────────────────────
+      if (eventType === "contact.propertyChange" && propertyName === "request_reschedule_payload" && newValue) {
+        console.log(`🎯 Reschedule payload for contact ${objectId}`);
         const result = await handleRescheduleSubmission({ contactId: objectId, payload: newValue, headers });
         console.log(`✅ Reschedule Submission:`, result);
         continue;
       }
 
-      // ── CONTACT: Cancel Ticket ID → known ────────────────
-      if (
-        eventType === "contact.propertyChange" &&
-        propertyName === "request_cancel_ticket_id" &&
-        newValue
-      ) {
-        console.log(`🎯 Cancel request for contact ${objectId} — running cancel submission`);
+      // ── CONTACT: Cancel Ticket ID ─────────────────────────
+      if (eventType === "contact.propertyChange" && propertyName === "request_cancel_ticket_id" && newValue) {
+        console.log(`🎯 Cancel request for contact ${objectId}`);
         const result = await handleCancelSubmission({ contactId: objectId, ticketId: newValue, headers });
         console.log(`✅ Cancel Submission:`, result);
         continue;
@@ -879,8 +1373,5 @@ exports.main = async (context) => {
     }
   }
 
-  return {
-    statusCode: 200,
-    body: { status: "processed" },
-  };
+  return { statusCode: 200, body: { status: "processed" } };
 };
