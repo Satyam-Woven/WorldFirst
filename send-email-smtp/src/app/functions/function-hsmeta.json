@@ -1,0 +1,18 @@
+{
+  "uid": "app-function-send-email",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/send_email.js",
+    "endpoint": {
+      "path": "/send_email",
+      "methods": [
+        "POST"
+      ]
+    },
+    "secretKeys": [
+      "SMTP_USERNAME",
+      "SMTP_PASSWORD",
+      "SMTP_HOST"
+    ]
+  }
+}
